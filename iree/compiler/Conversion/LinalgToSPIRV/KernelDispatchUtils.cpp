@@ -322,7 +322,7 @@ Optional<StringRef> LaunchConfig::getKey(Operation *op) const {
 
 LogicalResult LaunchConfig::init(
     MLIRContext *context, const linalg::LinalgDependenceGraph &dependenceGraph,
-    const SPIRVCodegenOptions &options, ArrayRef<Operation *> linalgOps) {
+    const SPIRVCodegenOptions &options, ArrayRef<linalg::LinalgOp> linalgOps) {
   unsigned numTiledOps = 0;
   auto setKey = [&](Operation *op) -> std::string {
     std::string key = llvm::formatv("__op_num_{0}__", numTiledOps++).str();
@@ -332,7 +332,7 @@ LogicalResult LaunchConfig::init(
   };
 
   if (!options.workgroupSize.empty()) {
-    for (Operation *linalgOp : linalgOps)
+    for (linalg::LinalgOp linalgOp : linalgOps)
       tileSizes[setKey(linalgOp)].emplace_back(options.tileSizes.begin(),
                                                options.tileSizes.end());
     workgroupSize = {1, 1, 1};
@@ -350,8 +350,7 @@ LogicalResult LaunchConfig::init(
 
   Optional<linalg::LinalgOp> rootOperation = {};
 
-  for (Operation *op : linalgOps) {
-    linalg::LinalgOp linalgOp = cast<linalg::LinalgOp>(op);
+  for (linalg::LinalgOp linalgOp : linalgOps) {
 #define DISPATCH(opName)                                                      \
   if (auto lOp = dyn_cast<opName>(linalgOp.getOperation())) {                 \
     if (rootOperation) {                                                      \
