@@ -13,6 +13,7 @@
 #include "iree/compiler/Codegen/PassDetail.h"
 #include "iree/compiler/Dialect/HAL/IR/HALDialect.h"
 #include "iree/compiler/Dialect/HAL/IR/HALOps.h"
+#include "mlir/Dialect/AMDGPU/IR/AMDGPUDialect.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/NVGPU/IR/NVGPUDialect.h"
 #include "mlir/Dialect/PDL/IR/PDL.h"
@@ -50,6 +51,7 @@ class LLVMGPULowerExecutableTargetPass
                 linalg::transform::LinalgTransformDialect,
                 gpu::GPUDialect,
                 nvgpu::NVGPUDialect,
+                amdgpu::AMDGPUDialect,
                 pdl::PDLDialect,
                 pdl_interp::PDLInterpDialect,
                 scf::SCFDialect,
@@ -66,6 +68,7 @@ class LLVMGPULowerExecutableTargetPass
   void runOnOperation() override;
 
  private:
+
   Option<bool> testLoweringConfiguration{
       *this, "test-lowering-configuration",
       llvm::cl::desc(
@@ -162,7 +165,14 @@ void LLVMGPULowerExecutableTargetPass::runOnOperation() {
       case IREE::Codegen::DispatchLoweringPassPipeline::LLVMGPUMatmulTensorCore:
         addGPUMatmulTensorCorePassPipeline(
             executableLoweringPipeline,
-            translationInfo.value().getSoftwarePipelineDepth());
+            translationInfo.value().getSoftwarePipelineDepth(),
+            false);
+        break;
+      case IREE::Codegen::DispatchLoweringPassPipeline::LLVMGPUMatrixFMA:
+        addGPUMatmulTensorCorePassPipeline(
+            executableLoweringPipeline,
+            translationInfo.value().getSoftwarePipelineDepth(),
+            true);
         break;
       case IREE::Codegen::DispatchLoweringPassPipeline::
           LLVMGPUMatmulTensorCoreMmaSync:

@@ -156,6 +156,16 @@ def FlattenMemRefSubspan :
   let constructor = "mlir::iree_compiler::createFlattenMemRefSubspanPass()";
 }
 
+def ConvertGPUToAMDGPUPass :
+  Pass<"iree-codegen-gpu-to-amdgpu", "func::FuncOp"> {
+  let summary =
+      "Flatten n-D MemRef subspan ops to 1-D ones and fold byte offsets";
+  let constructor = "mlir::iree_compiler::createConvertGPUToAMDGPUPass()";
+  let dependentDialects = [
+      "memref::MemRefDialect", "amdgpu::AMDGPUDialect", "affine::AffineDialect"
+  ];
+}
+
 def FoldAffineMinInDistributedLoops :
   Pass<"iree-codegen-fold-affinemin-in-distributed-loops", "func::FuncOp"> {
   let summary = "Fold `affine.min` ops in distributed loops";

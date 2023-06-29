@@ -66,7 +66,11 @@ struct LLVMGPUVectorToGPUPass
     }
 
     IRRewriter rewriter(&getContext());
-    if (targetMmaSync) {
+    if (tensorCoreType == GPUTensorCoreType::MFMA) {
+      if (failed(convertVectorToMMAOps(rewriter, funcOp))) {
+        return signalPassFailure();
+      }
+    } else if (targetMmaSync) {
       if (failed(convertVectorToNVVMCompatibleMMASync(rewriter, funcOp))) {
         return signalPassFailure();
       }
@@ -83,7 +87,9 @@ struct LLVMGPUVectorToGPUPass
         return signalPassFailure();
       }
     }
-    createAsyncGroups(rewriter, funcOp, targetMmaSync);
+    if (tensorCoreType != GPUTensorCoreType::MFMA) {
+      createAsyncGroups(rewriter, funcOp, targetMmaSync);
+    }
 
     if (targetMmaSync) {
       // Fold subview on memory copy to enable the application of shared memory

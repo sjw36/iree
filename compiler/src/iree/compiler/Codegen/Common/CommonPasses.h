@@ -99,6 +99,9 @@ std::unique_ptr<Pass> createExtractAddressComputationPass();
 /// to backends that require linearized access.
 std::unique_ptr<OperationPass<ModuleOp>> createFlattenMemRefSubspanPass();
 
+
+std::unique_ptr<OperationPass<func::FuncOp>> createConvertGPUToAMDGPUPass();
+  
 /// Creates a pass to fold `affine.min` ops in tiled and distributed loops.
 std::unique_ptr<OperationPass<func::FuncOp>>
 createFoldAffineMinInDistributedLoopsPass();

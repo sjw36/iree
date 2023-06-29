@@ -33,6 +33,7 @@ iree_cc_library(
     "LLVMGPUVectorToGPU.cpp"
     "Passes.cpp"
     "Verifiers.cpp"
+    "WmmaOpsToROCDL.cpp"
   DEPS
     IREELinalgExtDialect
     IREELinalgExtPasses

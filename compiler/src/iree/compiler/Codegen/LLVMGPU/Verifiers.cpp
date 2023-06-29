@@ -62,6 +62,17 @@ static LogicalResult getInstructionShape(
             "Expected f16, bf16 or f32 for Tensor Core (MMA.SYNC) pipeline");
       }
       break;
+    case IREE::Codegen::DispatchLoweringPassPipeline::LLVMGPUMatrixFMA:
+      // Tensor Core Pipeline / MMA.SYNC
+      if (inputElementType.isF16() || inputElementType.isBF16()) {
+        instructionShape = {16, 8, 16};
+      } else if (inputElementType.isF32()) {
+        instructionShape = {16, 8, 8};
+      } else {
+        return op->emitError(
+            "Expected f16, bf16 or f32 for Tensor Core (MMA.SYNC) pipeline");
+      }
+      break;
     default:
       return op->emitError(
           "Expected matmul SIMT, TensorCore(WMMA), or TensorCore(MMA.SYNC), "

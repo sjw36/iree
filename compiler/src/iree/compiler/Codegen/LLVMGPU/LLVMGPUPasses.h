@@ -27,7 +27,8 @@ void addGPUMatmulTensorCoreMmaSyncPassPipeline(OpPassManager &pm,
 
 /// Lowering using wmma Tensor Core operations.
 void addGPUMatmulTensorCorePassPipeline(OpPassManager &pm,
-                                        unsigned pipelineDepth);
+                                        unsigned pipelineDepth,
+                                        bool epiloguePeeling);
 
 void addGPUPackUnPackPasses(OpPassManager &pm);
 
@@ -82,6 +83,8 @@ createLLVMGPUPackSharedMemoryAlloc();
 enum class GPUTensorCoreType {
   WMMA = 0,
   MMA_SYNC = 1,
+  MFMA = 2,
+  AMDWMMA = 3,
 };
 
 /// Convert Linalg ops to Vector and prepare converstion to GPU MMA ops.
@@ -114,6 +117,8 @@ LogicalResult verifyGPUMatmulPipeline(
 //------------------------------------------------------------------------------
 
 std::unique_ptr<OperationPass<ModuleOp>> createTestLLVMGPULegalizePass();
+
+void populateGpuWMMAToAMDGPURewritePatterns(RewritePatternSet &patterns);
 
 }  // namespace iree_compiler
 }  // namespace mlir

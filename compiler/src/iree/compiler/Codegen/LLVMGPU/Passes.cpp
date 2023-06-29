@@ -213,7 +213,8 @@ void addGPUMatmulSimtPassPipeline(OpPassManager &pm) {
 }
 
 void addGPUMatmulTensorCorePassPipeline(OpPassManager &pm,
-                                        unsigned pipelineDepth) {
+                                        unsigned pipelineDepth,
+                                        bool epiloguePeeling) {
   tileAndBufferize(pm);
 
   auto &nestedModulePM = pm.nest<ModuleOp>();
@@ -253,11 +254,13 @@ void addGPUMatmulTensorCorePassPipeline(OpPassManager &pm,
       createGPUReduceSharedMemoryBankConflicts());
 
   // Vector -> MMA ops
+  GPUTensorCoreType gpucore = GPUTensorCoreType::MFMA;
   nestedModulePM.addNestedPass<func::FuncOp>(
       memref::createFoldMemRefAliasOpsPass());
   nestedModulePM.addPass(createCanonicalizerPass());
   nestedModulePM.addPass(createCSEPass());
-  nestedModulePM.addNestedPass<func::FuncOp>(createLLVMGPUVectorToGPU());
+
+  nestedModulePM.addNestedPass<func::FuncOp>(createLLVMGPUVectorToGPU(gpucore));
   nestedModulePM.addPass(createCanonicalizerPass());
   nestedModulePM.addPass(createCSEPass());
 
@@ -266,7 +269,7 @@ void addGPUMatmulTensorCorePassPipeline(OpPassManager &pm,
       createLoopInvariantCodeMotionPass());
   // Pipeline memory operations.
   nestedModulePM.addNestedPass<func::FuncOp>(createGPUPipeliningPass(
-      /*epiloguePeeling=*/false, pipelineDepth,
+      epiloguePeeling, pipelineDepth,
       PipeliningSchedulingStrategy::loadGlobalStage0));
   // Optimize shared memory usage.
   nestedModulePM.addNestedPass<func::FuncOp>(
@@ -504,6 +507,10 @@ static void addLowerToLLVMGPUPasses(OpPassManager &pm, bool useROCM) {
   addLowerAndOptimzeAddressComputation(pm);
   // THIS NEEDS TO RUN BEFORE SCF ->CF OFF
 
+  if (useROCM) {
+    pm.addNestedPass<func::FuncOp>(iree_compiler::createConvertGPUToAMDGPUPass());
+  }
+  
   // Run checks on shared memory usage.
   // TODO: query this from the target.
   auto getSharedMemoryLimit = [](func::FuncOp) { return 163 * 1024; };
@@ -532,12 +539,12 @@ static void addLowerToLLVMGPUPasses(OpPassManager &pm, bool useROCM) {
   // Strip out the debug info for the kernel as CUDA driver doesn't diggest PTX
   // debug info well.
   pm.addPass(createStripDebugInfoPass());
-  // Cast address spaces of all function arguments to generic
-  if (!useROCM) pm.addPass(createLLVMGPUCastAddressSpaceFunction());
   if (useROCM) {
     // convert to ROCDL.
     pm.addPass(createConvertToROCDLPass());
   } else {
+    // Cast address spaces of all function arguments to generic
+    pm.addPass(createLLVMGPUCastAddressSpaceFunction());
     // convert to NVVM.
     pm.addPass(createConvertToNVVMPass());
   }

@@ -9,6 +9,7 @@
 #include "iree/compiler/Codegen/PassDetail.h"
 #include "iree/compiler/Codegen/Utils/Utils.h"
 #include "iree/compiler/Dialect/Util/IR/UtilOps.h"
+#include "mlir/Conversion/AMDGPUToROCDL/AMDGPUToROCDL.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ComplexToLLVM/ComplexToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
@@ -20,6 +21,8 @@
 #include "mlir/Conversion/MathToLLVM/MathToLLVM.h"
 #include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
 #include "mlir/Conversion/VectorToLLVM/ConvertVectorToLLVM.h"
+#include "mlir/Dialect/AMDGPU/IR/AMDGPUDialect.h"
+#include "mlir/Dialect/AMDGPU/Utils/Chipset.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/Transforms/Passes.h"
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
@@ -33,6 +36,42 @@ namespace mlir {
 namespace iree_compiler {
 
 namespace {
+
+// A `dealloc` is converted into a call to `free` on the underlying data buffer.
+// The memref descriptor being an SSA value, there is no need to clean it up
+// in any way.
+struct DropSharedMemoryDeallocOp : public OpRewritePattern<memref::DeallocOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  static bool hasSharedMemoryAddressSpace(MemRefType memrefType) {
+    auto addrSpace = llvm::dyn_cast_if_present<gpu::AddressSpaceAttr>(
+        memrefType.getMemorySpace());
+    return addrSpace && addrSpace.getValue() == gpu::AddressSpace::Workgroup;
+  }
+
+  LogicalResult matchAndRewrite(memref::DeallocOp op,
+                                PatternRewriter &rewriter) const override {
+    if (!hasSharedMemoryAddressSpace(
+            llvm::cast<MemRefType>(op.getMemref().getType())))
+      return failure();
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct GPULaneIdOpRewrite : OpRewritePattern<gpu::LaneIdOp> {
+  using OpRewritePattern<gpu::LaneIdOp>::OpRewritePattern;
+
+  LogicalResult
+  matchAndRewrite(gpu::LaneIdOp op, PatternRewriter &rewriter) const override {
+    auto loc = op->getLoc();
+    Value newOp = rewriter.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+    Value cst_64 = rewriter.createOrFold<arith::ConstantIndexOp>(loc, 64);
+    newOp = rewriter.create<arith::RemUIOp>(loc, newOp, cst_64);
+    rewriter.replaceOp(op, {newOp});
+    return success();
+  }
+};
 
 /// A pass that replaces all occurrences of GPU device operations with their
 /// corresponding ROCDL equivalent.
@@ -66,9 +105,11 @@ struct ConvertToROCDLPass : public ConvertToROCDLBase<ConvertToROCDLPass> {
     // Apply in-dialect lowering first. In-dialect lowering will replace ops
     // which need to be lowered further, which is not supported by a single
     // conversion pass.
+    // Lowering for MMAMatrixType.
     // Run Vector -> Vector transformations ahead of conversion to LLVM.
     {
       RewritePatternSet patterns(&getContext());
+      patterns.insert<DropSharedMemoryDeallocOp>(&getContext());
       populateScalarizeMathOps(patterns);
       populateConvertSharedMemoryAllocOps(patterns);
       vector::populateVectorToVectorCanonicalizationPatterns(patterns);
@@ -91,11 +132,13 @@ struct ConvertToROCDLPass : public ConvertToROCDLBase<ConvertToROCDLPass> {
     {
       RewritePatternSet patterns(&getContext());
       populateGpuRewritePatterns(patterns);
+      patterns.add<GPULaneIdOpRewrite>(&getContext());
       if (failed(applyPatternsAndFoldGreedily(m, std::move(patterns)))) {
         return signalPassFailure();
       }
     }
     {
+      /// @@@@ use createLowerGpuOpsToROCDLPass
       RewritePatternSet llvmPatterns(&getContext());
       populateLowerHALInterfaceOp(llvmPatterns);
       populateLLVMConversionPatterns(&getContext(), llvmPatterns, converter);

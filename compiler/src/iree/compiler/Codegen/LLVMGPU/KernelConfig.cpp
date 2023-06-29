@@ -29,6 +29,10 @@ using namespace mlir::iree_compiler;
 
 static constexpr unsigned cudaWarpSize = 32;
 static constexpr StringLiteral kCudaTarget = "cuda";
+
+static constexpr unsigned rocmWarpSize = 64;
+static constexpr StringLiteral kRocmTarget = "rocm";
+
 namespace mlir {
 namespace iree_compiler {
 llvm::cl::opt<std::string> clGPUCodegenTransformDialectFileName(
@@ -73,9 +77,96 @@ namespace {
 
 /// Structure to represent target features.
 struct TargetInfo {
+  bool valid = false;
+  SmallString<8> targetArch;
+  uint32_t majorVersion = 0;
+  uint32_t minorVersion = 0;
+  
+  SmallString<8> backend;
+  uint32_t warpSize = cudaWarpSize;
   // TODO: add finer grain control for other tensorcore types.
   bool hasTF32TensorCore = false;
   bool hasWarpShuffle = false;
+
+  operator bool () const {
+    return isValid();
+  }
+
+  bool isValid() const {
+    return valid;
+  }
+
+  TargetInfo(func::FuncOp entryPoint) {
+    if (auto variantOp =
+            entryPoint->getParentOfType<IREE::HAL::ExecutableVariantOp>()) {
+      IREE::HAL::ExecutableTargetAttr targetAttr = variantOp.getTarget();
+      if (auto targetBackend = targetAttr.getBackend()) {
+        backend = targetBackend.getValue().str();
+      }
+      if (auto config = targetAttr.getConfiguration()) {
+        if (auto attr = config.getAs<StringAttr>("target_arch")) {
+          targetArch = attr.getValue();
+          if (isCudaBackend()) {
+            if (!isNVGPUTarget()) {
+              entryPoint.emitError("unknown target name ") << targetArch;
+            } else {
+              APInt version;
+              if (targetArch.substr(3).getAsInteger(10, version)) {
+                entryPoint.emitError("unknown target version ") << targetArch;
+              } else {
+                majorVersion = version.getZExtValue();
+                if (majorVersion >= 80) hasTF32TensorCore = true;
+                warpSize = cudaWarpSize;
+                valid = true;
+              }
+            }
+          } else if (isRocmBackend()) {
+            if (!isAMDGPUTarget()) {
+              entryPoint.emitError("unknown target name ") << targetArch;
+            } else {
+              APInt version;
+              if (targetArch.substr(3).getAsInteger(16, version)) {
+                entryPoint.emitError("unknown target version ") << targetArch;
+              } else {
+                int64_t archVersion = version.getZExtValue();
+                majorVersion = archVersion / 256;
+                minorVersion = archVersion % 256;
+                warpSize = rocmWarpSize;
+                valid = true;
+                switch (majorVersion) {
+                case 9:
+                  hasTF32TensorCore = !(minorVersion < 8);
+                  break;
+                case 17: // gfx11
+                case 18: // gfx12
+                case 19: // gfx13
+                case 20: // gfx14
+                  hasTF32TensorCore = true;
+                  break;
+                default:
+                  valid = false;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  bool isRocmBackend() const {
+    return backend == kRocmTarget;
+  }
+  bool isCudaBackend() const {
+    return backend == kCudaTarget;
+  }
+  bool isAMDGPUTarget() const {
+    return targetArch.startswith("gfx");
+  }
+  bool isNVGPUTarget() const {
+    return targetArch.startswith("sm_");
+  }
 };
 
 struct TileWorkgroupSizePair {
@@ -160,31 +251,49 @@ bool isCudaTarget(func::FuncOp entryPoint) {
   return false;
 }
 
-static TargetInfo getTargetInfo(func::FuncOp entryPoint) {
-  TargetInfo info;
-  // TODO: fill out target info for other vendors.
-  if (!isCudaTarget(entryPoint)) return info;
-  // All the cuda target are assumed to have warp support.
-  info.hasWarpShuffle = true;
-  StringRef targetName = getTargetArch(entryPoint);
-  // If no target name is set assume all the features are off.
-  if (targetName == "") return info;
-  if (!StringRef(targetName).starts_with("sm_")) {
-    entryPoint.emitError("unknown target name ") << targetName;
-    return info;
+bool isRocmTarget(func::FuncOp entryPoint) {
+  if (auto variantOp =
+          entryPoint->getParentOfType<IREE::HAL::ExecutableVariantOp>()) {
+    IREE::HAL::ExecutableTargetAttr targetAttr = variantOp.getTarget();
+    if (auto backend = targetAttr.getBackend()) {
+      return backend.getValue().str() == kRocmTarget;
+    }
   }
-  APInt version;
-  if (targetName.substr(3).getAsInteger(10, version)) {
-    entryPoint.emitError("unknown target version ") << targetName;
-    return info;
+  return false;
+}
+
+static bool supportsMatrixFMA(func::FuncOp entryPoint, linalg::LinalgOp op,
+                              const TargetInfo &targetInfo) {
+  if (!targetInfo.isAMDGPUTarget())
+    return false;
+  if (!targetInfo.hasTF32TensorCore) return false;
+  
+  // Limit tensor core pipeline to matmul as not all combinations of transpose
+  // are supported upstream.
+  if (!(isa<linalg::MatmulOp>(op) || isa<linalg::BatchMatmulOp>(op))) {
+    assert(linalg::isaContractionOpInterface(op));
+    // If this is not a named op matmul check some properties to make sure that
+    // we can map it to matrixfma ops. We should have only mulAdd in the region
+    // and the output map should have no permutation and the last dimension
+    // should be a reduce.
+    Region &body = op->getRegion(0);
+    Region::OpIterator it = body.op_begin();
+    if (it == body.op_end() || !isa<arith::MulFOp>(*(it++))) return false;
+    if (it == body.op_end() || !isa<arith::AddFOp>(*(it++))) return false;
+    if (it == body.op_end() || !isa<linalg::YieldOp>(*(it++))) return false;
+    AffineMap outputMap = op.getMatchingIndexingMap(op.getDpsInitOperand(0));
+    if (outputMap.getNumResults() != outputMap.getNumDims() - 1) return false;
+    OpBuilder b(op);
+    for (unsigned i = 0, e = outputMap.getNumResults(); i < e - 1; i++) {
+      if (outputMap.getResult(i) != b.getAffineDimExpr(i)) return false;
+    }
   }
-  int64_t smVersion = version.getZExtValue();
-  if (smVersion >= 80) info.hasTF32TensorCore = true;
-  return info;
+  return true;
 }
 
 static bool supportsTensorCore(func::FuncOp entryPoint, linalg::LinalgOp op,
                                const TargetInfo &targetInfo) {
+  if (!targetInfo.isNVGPUTarget()) return false;
   // Limit tensor core pipeline to matmul as not all combinations of transpose
   // are supported upstream.
   if (!targetInfo.hasTF32TensorCore) return false;
@@ -219,19 +328,20 @@ static IREE::Codegen::DispatchLoweringPassPipeline getTensorCorePipeline(
   // For F16 and F32 use mmasync by default.
   if (elementType.isF16() || elementType.isF32()) {
     codegenPipeline = IREE::Codegen::DispatchLoweringPassPipeline::
-        LLVMGPUMatmulTensorCoreMmaSync;
+                          LLVMGPUMatmulTensorCoreMmaSync;
   }
 
   // Override the decision based on cl flags.
   assert(!(clGPUUseWMMA && clGPUUseMMASync) && "incompatible options.");
   if (clGPUUseMMASync) {
     codegenPipeline = IREE::Codegen::DispatchLoweringPassPipeline::
-        LLVMGPUMatmulTensorCoreMmaSync;
+                          LLVMGPUMatmulTensorCoreMmaSync;
   }
   if (clGPUUseWMMA) {
     codegenPipeline =
         IREE::Codegen::DispatchLoweringPassPipeline::LLVMGPUMatmulTensorCore;
-  };
+  }
+
   return codegenPipeline;
 }
 
@@ -316,7 +426,29 @@ static LogicalResult setContractConfig(func::FuncOp entryPoint,
                       sizeK != ShapedType::kDynamic;
   if (isStaticSize) {
     /// Try tensorcore config first.
-    if (supportsTensorCore(entryPoint, op, targetInfo)) {
+    if (supportsMatrixFMA(entryPoint, op, targetInfo)) {
+      SmallVector<TileWorkgroupSizePair> TCtileSizeConfig;
+      Type elementType = llvm::cast<RankedTensorType>(
+                             op.getDpsInputOperand(0)->get().getType())
+                             .getElementType();
+
+      getTensorCoreConfig(TCtileSizeConfig, elementType, sizeM, sizeN, sizeK);
+      // Pick the best configuration where the original shape is aligned on the
+      // tile size.
+      for (TileWorkgroupSizePair &config : TCtileSizeConfig) {
+        if (sizeK % config.tileSize[2] == 0 &&
+            sizeN % config.tileSize[1] == 0 &&
+            sizeM % config.tileSize[0] == 0) {
+          IREE::Codegen::DispatchLoweringPassPipeline codegenPipeline =
+              IREE::Codegen::DispatchLoweringPassPipeline::LLVMGPUMatrixFMA;
+          return setMatmulConfig(
+              config.tileSize[0], config.tileSize[1], config.tileSize[2],
+              config.workgroupSize,
+              sizeK == config.tileSize[2] ? 1 : config.pipelineDepth,
+              codegenPipeline);
+        }
+      }
+    } else if (supportsTensorCore(entryPoint, op, targetInfo)) {
       SmallVector<TileWorkgroupSizePair> TCtileSizeConfig;
       Type elementType = llvm::cast<RankedTensorType>(
                              op.getDpsInputOperand(0)->get().getType())
@@ -981,7 +1113,7 @@ static LogicalResult setConvolutionConfig(linalg::LinalgOp linalgOp,
 
 static LogicalResult setRootConfig(func::FuncOp entryPointFn,
                                    Operation *computeOp) {
-  TargetInfo targetInfo = getTargetInfo(entryPointFn);
+  TargetInfo targetInfo(entryPointFn);
   if (IREE::Codegen::CompilationInfoAttr compilationInfo =
           getCompilationInfo(computeOp)) {
     // If the op already has a lowering config coming from the IR use this and
