@@ -74,6 +74,7 @@ option(IREE_BUILD_SAMPLES "Builds IREE sample projects." ON)
 option(IREE_BUILD_PYTHON_BINDINGS "Builds the IREE python bindings" OFF)
 option(IREE_BUILD_TRACY "Builds tracy server tools." OFF)
 option(IREE_BUILD_BUNDLED_LLVM "Builds the bundled llvm-project (vs using installed)" ON)
+option(IREE_BUILD_AIUNITE "Builds AIUNITE interface." ON)
 
 option(IREE_BYTECODE_MODULE_FORCE_LLVM_SYSTEM_LINKER "Use the system linker when generating IREE modules in tests/samples/benchmarks (useful for Tracy)." OFF)
 
@@ -1068,6 +1069,10 @@ add_subdirectory(build_tools/python)
 
 # samples/ can depend on anything, so we include it last
 if(IREE_BUILD_SAMPLES)
+  if(IREE_BUILD_AIUNITE)
+    include(build_tools/cmake/aiunite.cmake)
+  endif()
+
   add_subdirectory(samples)
 endif()
 
