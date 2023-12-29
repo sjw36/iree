@@ -38,10 +38,8 @@ class QueryPartitionPass
     auto module = ModuleOp::create(UnknownLoc::get(ctx), "foo");
     module.push_back(f.clone());
     PassManager pm(ctx);
-#if 0
-    pm.addNestedPass<func::FuncOp>(tosa::createPrepareMhloPass());
-    pm.addNestedPass<func::FuncOp>(tosa::createLegalizeMhloPass());
-#endif
+    pm.addNestedPass<func::FuncOp>(tosa::createStablehloPrepareForTosaPass());
+    pm.addNestedPass<func::FuncOp>(tosa::createStablehloLegalizeToTosaPass());
     auto lr = pm.run(module);
     module.dump();
     if (failed(lr))
@@ -68,35 +66,6 @@ class QueryPartitionPass
 
     MlirModule resMod = AIUGetModule(solution);
     unwrap(resMod).dump();
-
-#if 0
-    if (!f.empty()) {
-      AIUModel model;
-      AIUCreateModel(f.getName().str().c_str(), &model);
-
-      llvm::DenseMap<Value, AIUValue> valMap;
-      for (auto fin : f.front().getArguments()) {
-        llvm::SmallVector<int64_t> typedims;
-        auto finType = fin.getType().cast<TensorType>();
-        AIUType aiuType;
-        AIUGetTensorType(model, finType.getRank(), finType.getShape().data(), AIU_F32, &aiuType);
-        AIUValue aiuParam;
-        AIUAddParameter(model, aiuType, &aiuParam);
-        Value finV = fin;
-        valMap.insert({finV, aiuParam});
-      }
-
-      for (auto &op : f.front().getOperations()) {
-        if (auto conv = dyn_cast<mhlo::ConvolutionOp>(op)) {
-
-        }
-      }
-      
-      const char *model_dump;
-      AIUPrintModel(model, &model_dump);
-      std::cout << "MODEL: " << model_dump;
-    }    
-#endif
   }
 };
 
