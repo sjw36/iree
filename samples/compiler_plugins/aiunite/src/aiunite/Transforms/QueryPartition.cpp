@@ -15,6 +15,11 @@
 #include "mhlo/IR/hlo_ops.h"
 #include "tosa/transforms/passes.h"
 
+#include "torch-mlir/Conversion/TorchToArith/TorchToArith.h"
+#include "torch-mlir/Conversion/TorchToSCF/TorchToSCF.h"
+#include "torch-mlir/Conversion/TorchToTosa/TorchToTosa.h"
+#include "torch-mlir/Conversion/TorchToTensor/TorchToTensor.h"
+
 #include "aiunite/client.h"
 
 #include "aiunite/Transforms/Passes.h"
@@ -38,8 +43,14 @@ class QueryPartitionPass
     auto module = ModuleOp::create(UnknownLoc::get(ctx), "foo");
     module.push_back(f.clone());
     PassManager pm(ctx);
+    // stablehlo conversions
     pm.addNestedPass<func::FuncOp>(tosa::createStablehloPrepareForTosaPass());
     pm.addNestedPass<func::FuncOp>(tosa::createStablehloLegalizeToTosaPass());
+
+    pm.addNestedPass<func::FuncOp>(torch::createConvertTorchToTosaPass());
+    pm.addNestedPass<func::FuncOp>(torch::createConvertTorchToArithPass());
+    pm.addNestedPass<func::FuncOp>(torch::createConvertTorchToTensorPass());
+
     auto lr = pm.run(module);
     module.dump();
     if (failed(lr))
