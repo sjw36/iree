@@ -41,3 +41,6 @@
 [submodule "third_party/hip-build-deps"]
 	path = third_party/hip-build-deps
 	url = https://github.com/shark-infra/hip-build-deps.git
+[submodule "third_party/aiunite"]
+	path = third_party/aiunite
+	url = https://github.com/ROCmSoftwarePlatform/aiunite.git

@@ -56,8 +56,8 @@ iree_cc_library(
     MLIRFuncDialect
     MLIRIR
     MLIRPass
-    MhloDialect
-    MHLOTOSATransforms
+    StablehloOps
+    StablehloTOSATransforms
     AIUniteClient
   PUBLIC
 )

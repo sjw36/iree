@@ -12,8 +12,8 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/CAPI/IR.h"
 
-#include "mhlo/IR/hlo_ops.h"
-#include "tosa/transforms/passes.h"
+#include "stablehlo/dialect/StablehloOps.h"
+#include "stablehlo/conversions/tosa/transforms/Passes.h"
 
 #include "aiunite/client.h"
 
@@ -38,8 +38,10 @@ class QueryPartitionPass
     auto module = ModuleOp::create(UnknownLoc::get(ctx), "foo");
     module.push_back(f.clone());
     PassManager pm(ctx);
+#if 0
     pm.addNestedPass<func::FuncOp>(tosa::createPrepareMhloPass());
     pm.addNestedPass<func::FuncOp>(tosa::createLegalizeMhloPass());
+#endif
     auto lr = pm.run(module);
     module.dump();
     if (failed(lr))
