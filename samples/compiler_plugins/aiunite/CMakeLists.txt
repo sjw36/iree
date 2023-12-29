@@ -39,8 +39,6 @@ iree_compiler_register_plugin(
     ::registration
 )
 
-include_directories(SYSTEM "${IREE_BINARY_DIR}/llvm-external-projects/mlir-hlo/tosa/transforms")
-
 iree_cc_library(
   NAME
     Transforms
@@ -58,6 +56,10 @@ iree_cc_library(
     MLIRPass
     StablehloOps
     StablehloTOSATransforms
+    torch-mlir::ConversionPasses
+    torch-mlir::TorchConversionDialectIR
+    torch-mlir::TorchDialectPasses
+    torch-mlir-dialects::TMTensorDialectIR
     AIUniteClient
   PUBLIC
 )
