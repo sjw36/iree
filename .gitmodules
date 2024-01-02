@@ -44,3 +44,4 @@
 [submodule "third_party/aiunite"]
 	path = third_party/aiunite
 	url = https://github.com/ROCmSoftwarePlatform/aiunite.git
+        branch = iree-12.29.23
