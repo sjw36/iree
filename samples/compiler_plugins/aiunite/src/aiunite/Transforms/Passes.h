@@ -7,6 +7,7 @@
 #ifndef IREE_SAMPLES_COMPILER_PLUGINS_AIUNITE_TRANSFORMS_PASSES_H_
 #define IREE_SAMPLES_COMPILER_PLUGINS_AIUNITE_TRANSFORMS_PASSES_H_
 
+#include "iree/compiler/Dialect/HAL/IR/HALOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Tosa/IR/TosaOps.h"
 #include "mlir/Dialect/PDL/IR/PDL.h"
