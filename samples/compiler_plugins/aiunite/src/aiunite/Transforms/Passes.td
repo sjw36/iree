@@ -14,9 +14,6 @@ def QueryPartition : Pass<"iree-aiunite-partition", "mlir::func::FuncOp"> {
   let constructor = [{
     ::mlir::iree_compiler::IREE::AIUnite::createQueryPartitionPass()
   }];
-  let dependentDialects = [
-    "mlir::tosa::TosaDialect", "mlir::func::FuncDialect", "mlir::pdl::PDLDialect", "mlir::pdl_interp::PDLInterpDialect"
-  ];
 }
 
 #endif // IREE_AIUNITE_PASSES

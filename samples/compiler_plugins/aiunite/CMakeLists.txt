@@ -51,7 +51,10 @@ iree_cc_library(
   DEPS
     ::PassesIncGen
     ::defs
+    iree::compiler::Dialect::HAL::IR
+    iree::compiler::Dialect::HAL::IR::HALDialect
     MLIRFuncDialect
+    MLIRMHAL
     MLIRIR
     MLIRPass
     StablehloOps
@@ -59,7 +62,6 @@ iree_cc_library(
     torch-mlir::ConversionPasses
     torch-mlir::TorchConversionDialectIR
     torch-mlir::TorchDialectPasses
-    torch-mlir-dialects::TMTensorDialectIR
     AIUniteClient
   PUBLIC
 )
