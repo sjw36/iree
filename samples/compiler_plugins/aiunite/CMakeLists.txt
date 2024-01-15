@@ -19,9 +19,16 @@ iree_cc_library(
   PUBLIC
 )
 
+iree_compiler_register_plugin(
+  PLUGIN_ID
+    hal_target_aiunite
+  TARGET
+    ::aiunite
+)
+
 iree_cc_library(
   NAME
-    registration
+    aiunite
   SRCS
     "src/PluginRegistration.cpp"
   DEPS
@@ -30,13 +37,6 @@ iree_cc_library(
     MLIRIR
     iree::compiler::PluginAPI
   PUBLIC
-)
-
-iree_compiler_register_plugin(
-  PLUGIN_ID
-    aiunite
-  TARGET
-    ::registration
 )
 
 iree_cc_library(

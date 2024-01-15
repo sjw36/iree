@@ -39,9 +39,6 @@ class QueryPartitionPass
     : public impl::QueryPartitionBase<QueryPartitionPass> {
  public:
    void getDependentDialects(DialectRegistry &registry) const override {
-     registry.insert<
-       IREE::HAL::HALDialect, tosa::TosaDialect, func::FuncDialect,
-       pdl::PDLDialect, pdl_interp::PDLInterpDialect>();
   }
 
   static bool init() {
