@@ -41,3 +41,7 @@
 [submodule "third_party/hip-build-deps"]
 	path = third_party/hip-build-deps
 	url = https://github.com/shark-infra/hip-build-deps.git
+[submodule "third_party/aiunite"]
+	path = third_party/aiunite
+	url = git@github.com:sjw36/aiunite.git
+	branch = iree-12.29.23
