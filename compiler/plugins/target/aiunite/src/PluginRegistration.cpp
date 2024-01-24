@@ -89,12 +89,13 @@ public:
     if (variantOp.isExternal())
       return;
 
-    passManager.addNestedPass<func::FuncOp>(IREE::AIUnite::createQueryPartitionPass());
+    passManager.addPass(IREE::AIUnite::createQueryPartitionPass());
     //buildSPIRVCodegenPassPipeline(passManager, /*enableFastMath=*/false);
   }
   LogicalResult serializeExecutable(const SerializationOptions &serOptions,
                                     IREE::HAL::ExecutableVariantOp variantOp,
                                     OpBuilder &executableBuilder) override {
+    assert(0);
 #if 0
     ModuleOp innerModuleOp = variantOp.getInnerModule();
     auto spvModuleOp = *innerModuleOp.getOps<spirv::ModuleOp>().begin();

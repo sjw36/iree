@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/MHAL/IR/MHAL.h"
+//#include "mlir/Dialect/MHAL/IR/MHAL.h"
 #include "iree/compiler/Dialect/HAL/IR/HALDialect.h"
 #include "iree/compiler/Dialect/HAL/IR/HALOps.h"
 #include "mlir/Dialect/Tosa/IR/TosaOps.h"
@@ -15,14 +15,16 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/CAPI/IR.h"
 
-#include "mhlo/IR/hlo_ops.h"
-#include "tosa/transforms/passes.h"
+#include "stablehlo/dialect/StablehloOps.h"
+#include "stablehlo/conversions/tosa/transforms/Passes.h"
 
+#if 0
 #include "torch-mlir/Dialect/Torch/IR/TorchDialect.h"
 #include "torch-mlir/Conversion/TorchToArith/TorchToArith.h"
 #include "torch-mlir/Conversion/TorchToSCF/TorchToSCF.h"
 #include "torch-mlir/Conversion/TorchToTosa/TorchToTosa.h"
 #include "torch-mlir/Conversion/TorchToTensor/TorchToTensor.h"
+#endif
 
 #include "aiunite/client.h"
 
@@ -116,7 +118,7 @@ class QueryPartitionPass
     // builder on original func parent module
     auto parMod = f->getParentOfType<ModuleOp>();
     OpBuilder b(parMod);
-    
+#if 0 
     ftop.walk([&](mhal::LaunchOp l) {
         Location loc = l->getLoc();
         CallOpInterface callIf(l);
@@ -153,7 +155,7 @@ class QueryPartitionPass
         }
 
       });
-
+#endif
     parMod.dump();
 #endif
     
@@ -162,7 +164,7 @@ class QueryPartitionPass
 
 }  // namespace
 
-std::unique_ptr<OperationPass<func::FuncOp>> createQueryPartitionPass() {
+std::unique_ptr<OperationPass<iree_compiler::IREE::HAL::ExecutableVariantOp>> createQueryPartitionPass() {
   // call once
   return std::make_unique<QueryPartitionPass>();
 }

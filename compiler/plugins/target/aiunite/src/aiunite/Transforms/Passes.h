@@ -18,7 +18,8 @@
 
 namespace mlir::iree_compiler::IREE::AIUnite {
 
-std::unique_ptr<OperationPass<mlir::func::FuncOp>> createQueryPartitionPass();
+std::unique_ptr<OperationPass<iree_compiler::IREE::HAL::ExecutableVariantOp>> createQueryPartitionPass();
+
 
 }  // namespace mlir::iree_compiler::IREE::AIUnite
 

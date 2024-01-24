@@ -9,7 +9,8 @@ include "mlir/Pass/PassBase.td"
 #ifndef IREE_AIUNITE_PASSES
 #define IREE_AIUNITE_PASSES
 
-def QueryPartition : Pass<"iree-aiunite-partition", "mlir::func::FuncOp"> {
+def QueryPartition : Pass<"iree-aiunite-partition",
+     "mlir::iree_compiler::IREE::HAL::ExecutableVariantOp"> {
   let summary = "Query AIUnite to partition ops";
   let constructor = [{
     ::mlir::iree_compiler::IREE::AIUnite::createQueryPartitionPass()
