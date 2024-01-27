@@ -1,12 +1,14 @@
 
-!A_size = tensor<3x5xf32>
-!B_size = tensor<5x3xf32>
-!C_size = tensor<3x3xf32>
+!A_size = tensor<1x3x5xf32>
+!B_size = tensor<1x5x3xf32>
+!C_size = tensor<1x3x3xf32>
 
-func.func @matmul_static(
-    %A : !A_size, %B : !B_size, %C : !C_size) -> !C_size {
-  %0 = linalg.matmul ins(%A, %B : !A_size, !B_size)
-                     outs(%C : !C_size) -> !C_size
+func.func @matmul_static(%A : !A_size, %B : !B_size) -> !C_size {
+  %cst_0 = arith.constant 0.0 : f32
+  %C = tensor.empty() : !C_size
+  %C0 = linalg.fill ins(%cst_0 : f32) outs(%C : !C_size) -> !C_size
+  %0 = linalg.batch_matmul ins(%A, %B : !A_size, !B_size)
+                     outs(%C0 : !C_size) -> !C_size
   return %0 : !C_size
 }
 
